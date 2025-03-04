@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Caller</title>
+    <style>
+        body { text-align: center; background: black; color: white; font-family: Arial, sans-serif; }
+        video { width: 20%; border: 2px solid white; margin: 10px; background: black; }
+        #remoteVideos { display: flex; flex-wrap: wrap; justify-content: center; }
+        button { padding: 10px; margin: 5px; }
+    </style>
+</head>
+<body>
+    <h1>Caller</h1>
+    <video id="localVideo" autoplay playsinline muted></video>
+    <div id="remoteVideos"></div>
+    <br>
+    <button id="startCall">Start Call</button>
+    <button id="endCall">End All Calls</button>
+
+    <script>
+        const ws = new WebSocket("ws://localhost:3001");
+        let peerConnection = null; // Single peer connection
+        let localStream;
+        let userId = "caller";
+        ws.onopen = () => ws.send(JSON.stringify({ type: "register", id: userId }));
+
+        async function startCall() {
+            localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            document.getElementById("localVideo").srcObject = localStream;
+        }
+
+        // Handle incoming joiner request (peer connection should be created once)
+        async function handleJoiner(joinerId) {
+            if (!localStream) await startCall();
+            
+            if (!peerConnection) {
+                // Create peer connection only once
+                peerConnection = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+                localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+                peerConnection.onicecandidate = event => {
+                    if (event.candidate) {
+                        ws.send(JSON.stringify({ type: "candidate", target: joinerId, candidate: event.candidate, from: userId }));
+                    }
+                };
+
+                peerConnection.ontrack = event => {
+                    let remoteVideo = document.getElementById("video_" + joinerId);
+                    if (!remoteVideo) {
+                        remoteVideo = document.createElement("video");
+                        remoteVideo.id = "video_" + joinerId;
+                        remoteVideo.autoplay = true;
+                        remoteVideo.playsInline = true;
+                        remoteVideo.style.width = "20%";
+                        remoteVideo.style.border = "2px solid white";
+                        remoteVideo.style.margin = "10px";
+                        document.getElementById("remoteVideos").appendChild(remoteVideo);
+                    }
+                    remoteVideo.srcObject = event.streams[0];
+                };
+            }
+
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+            ws.send(JSON.stringify({ type: "offer", target: joinerId, offer, from: userId }));
+        }
+
+        // Handle incoming messages (offer/answer/candidate)
+        ws.onmessage = async (message) => {
+            const data = JSON.parse(message.data);
+            if (data.type === "requestOffer" && data.from) {
+                // Handle joiner request (offer)
+                handleJoiner(data.from);
+            } else if (data.type === "answer" && data.from) {
+                if (peerConnection) {
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+                }
+            } else if (data.type === "candidate" && data.from) {
+                if (peerConnection) {
+                    await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+                }
+            } else if (data.type === "endCall" && data.from) {
+                // Handle ending the call
+                if (peerConnection) {
+                    peerConnection.close();
+                    peerConnection = null;
+                    const remoteVideo = document.getElementById("video_" + data.from);
+                    if (remoteVideo) remoteVideo.remove();
+                }
+            }
+        };
+
+        function endAllCalls() {
+            if (peerConnection) {
+                ws.send(JSON.stringify({ type: "endCall", target: "joiner", from: userId }));
+                peerConnection.close();
+                peerConnection = null;
+                const remoteVideos = document.getElementById("remoteVideos");
+                remoteVideos.innerHTML = ""; // Clear remote videos
+            }
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                document.getElementById("localVideo").srcObject = null;
+            }
+        }
+
+        document.getElementById("startCall").addEventListener("click", startCall);
+        document.getElementById("endCall").addEventListener("click", endAllCalls);
+    </script>
+</body>
+</html>

@@ -7,7 +7,15 @@ include("cofig.php"); // Database connection
 // Fetch logged-in user role
 
 $user_id = $_SESSION['user_id'];
+$query = $conn->prepare("SELECT status FROM video_call_requests WHERE caller_id = ? AND receiver_id = ?");
+$query->bind_param("ii", $receiver_id, $user_id);
+$query->execute();
+$result = $query->get_result();
 
+$status = null;
+if ($row = $result->fetch_assoc()) {
+    $status = $row['status'];
+}
 // Check if the user is an admin, super admin, or employee
 $query = "SELECT role FROM admin WHERE id = '$user_id'";
 $result = $conn->query($query);
@@ -78,6 +86,41 @@ if ($result2->num_rows > 0) {
         .user-status { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
         .online { background-color: green; }
         .offline { background-color: gray; }
+
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.4);
+            padding-top: 60px;
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: 5% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+            max-width: 400px;
+        }
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+        }
+        .close:hover,
+        .close:focus {
+            color: black;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        
     </style>
 </head>
 <body>
@@ -137,6 +180,38 @@ $result = $stmt->get_result();
         <?php endwhile; ?>
     </ul>
 </div>
+<?php if ($status == 'answered'): ?>
+    <div id="callModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>Video Call Answered</h2>
+            <p>The call has been answered. Join the video call now!</p>
+            <a href="join_call.php?user_id=<?php echo $receiver_id; ?>" class="button">Join Call</a>
+        </div>
+    </div>
+<?php endif; ?>
+    </div>
+</div>
+<script>
+    // Show the modal if the call status is answered
+    var modal = document.getElementById("callModal");
+    if (modal) {
+        modal.style.display = "block";
+    }
+    
+    // Close modal function
+    var span = document.getElementsByClassName("close")[0];
+    span.onclick = function() {
+        modal.style.display = "none";
+    }
+
+    // Close modal when clicking outside of it
+    window.onclick = function(event) {
+        if (event.target == modal) {
+            modal.style.display = "none";
+        }
+    }
+</script>
 <script>
 $(document).ready(function(){
     $("#searchInput").on("keyup", function() {

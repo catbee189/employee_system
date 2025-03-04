@@ -58,7 +58,6 @@ $users = $users_result->fetch_all(MYSQLI_ASSOC);
     <!-- Bootstrap CSS & Icons -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
-    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     </head>
     <!-- jQuery -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
@@ -80,74 +79,24 @@ $users = $users_result->fetch_all(MYSQLI_ASSOC);
       
     
         /* Video Popup */
-        .video-popup {
-    display: none;
+        popup {
+    display: none; /* Hidden by default */
     position: fixed;
-    top: 0;
     left: 0;
+    top: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.8);
+    background-color: rgba(0, 0, 0, 0.5);
     justify-content: center;
     align-items: center;
 }
 
-.video-container {
-    background: #222;
+.popup-content {
+    background-color: white;
     padding: 20px;
-    border-radius: 10px;
-    text-align: center;
-}
-
-#videoGrid {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 10px;
-}
-
-video {
-    width: 200px;
-    border-radius: 10px;
-    background: black;
-}
-
-.controls {
-    margin-top: 10px;
-    display: flex;
-    justify-content: center;
-    gap: 10px;
-}
-
-button {
-    background: #007bff;
-    color: white;
-    border: none;
-    padding: 10px 15px;
-    cursor: pointer;
     border-radius: 5px;
-    display: flex;
-    align-items: center;
-    gap: 5px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
 }
-        #videoPopup, #incomingCallPopup {
-            display: none;
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: white;
-            padding: 20px;
-            border: 2px solid black;
-            z-index: 1000;
-        }
-        video {
-            width: 200px;
-            height: 150px;
-            margin: 5px;
-            border: 1px solid black;
-        }
-
    </style>
 </head>
 <body>
@@ -167,6 +116,9 @@ button {
             <ul class="dropdown-menu">
                 <li><h6 class="dropdown-header">Current Members</h6></li>
                 <?php foreach ($members as $user): ?>
+                    <input type="hidden" value="<?=  $user['group_id']?>" id="group_id">
+
+          <input type="hidden" value="<?=  $user['user_id']?>" id="user_id">
                     <li class="list-group-item d-flex align-items-center mb-2" data-id="<?= htmlspecialchars($user['id']) ?>">
     <img src="<?= !empty($user['profile_image']) ? 'uploads/' . htmlspecialchars($user['profile_image']) : 'uploads/default.png'; ?>" class="user-avatar rounded-circle me-3" width="50" height="50">
     <span class="user-status <?= htmlspecialchars($user['status'] ?? 'offline') ?>"></span>
@@ -183,28 +135,33 @@ button {
                     <button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#addMemberModal">Add Member</button>
                 </li>
             </ul>
-          
+            
            <!-- Call Buttons -->
-           <div id="groupContainer"></div>
-           <button id="startGroupCall">Start Group Call</button>
-    <div id="groupContainer"></div>
+            <!-- Start Group Call Button -->
+    <div id="groupContainer">
+    <h1>Welcome to Video Call</h1>
+    <button id="startCallBtn">Start Video Call</button>
 
-    <!-- Incoming Call Popup -->
-    <div id="incomingCallPopup">
-        <h3>Incoming Call</h3>
-        <button id="joinCall">Join Call</button>
-        <button id="declineCall">Decline</button>
+    <div id="popup" class="popup">
+        <p>Do you want to join the call?</p>
+        <button id="joinBtn">Join</button>
+        <button onclick="document.getElementById('popup').style.display='none'">Decline</button>
     </div>
 
-    <!-- Video Call Popup -->
-    <div id="videoPopup">
-        <h3>Video Call</h3>
-        <div id="videoGrid"></div>
-        <button id="endCall">End Call</button>
-    </div>
-   </div>
+    <script>
+        document.getElementById("startCallBtn").addEventListener("click", function () {
+            window.open("scratch/call.html", "_blank"); // Open call.html in a new tab
+            setTimeout(() => { document.getElementById("popup").style.display = "block"; }, 1000); // Show popup after 1 second
+        });
 
-        <!-- Modal for Adding Members -->
+        document.getElementById("joinBtn").addEventListener("click", function () {
+            window.location.href = "scratch/join.html"; // Redirect to join.html
+        });
+    </script>
+    </div>
+
+  </div>
+      <!-- Modal for Adding Members -->
         <div class="modal fade" id="addMemberModal" tabindex="-1" aria-labelledby="addMemberModalLabel" aria-hidden="true">
             <div class="modal-dialog">
                 <div class="modal-content">
@@ -360,87 +317,7 @@ $(document).ready(function () {
 
 </script>
   <script>
-     const socket = io("http://localhost:3000");
-const videoGrid = document.getElementById("videoGrid");
-let localStream;
-let peerConnections = {};
-let groupId = 1; // Change as needed
-let userId = "user123"; // Should be dynamically set from login
-
-// Check if the user is a member before showing join option
-socket.emit("requestJoin", groupId, userId);
-
-socket.on("joinRequest", (canJoin) => {
-    if (canJoin) {
-        document.getElementById("incomingCallPopup").style.display = "block";
-    } else {
-        alert("You are not a member of this group.");
-    }
-});
-
-// Start Group Call
-document.getElementById("startGroupCall").addEventListener("click", () => {
-    document.getElementById("videoPopup").style.display = "block";
-    startVideoStream();
-    socket.emit("joinCall", groupId, userId);
-});
-
-// Accept Call
-document.getElementById("joinCall").addEventListener("click", () => {
-    document.getElementById("incomingCallPopup").style.display = "none";
-    document.getElementById("videoPopup").style.display = "block";
-    startVideoStream();
-    socket.emit("joinCall", groupId, userId);
-});
-
-// Decline Call
-document.getElementById("declineCall").addEventListener("click", () => {
-    document.getElementById("incomingCallPopup").style.display = "none";
-    socket.emit("declineCall", groupId, userId);
-});
-
-// End Call
-document.getElementById("endCall").addEventListener("click", () => {
-    document.getElementById("videoPopup").style.display = "none";
-    stopVideoStream();
-    socket.emit("endCall", groupId, userId);
-});
-
-// Get User Media
-function startVideoStream() {
-    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-        .then(stream => {
-            localStream = stream;
-            const videoElement = document.createElement("video");
-            videoElement.srcObject = stream;
-            videoElement.autoplay = true;
-            videoElement.muted = true;
-            videoGrid.appendChild(videoElement);
-        })
-        .catch(error => console.error("Error accessing camera:", error));
-}
-
-// Stop Video Stream
-function stopVideoStream() {
-    if (localStream) {
-        localStream.getTracks().forEach(track => track.stop());
-    }
-    videoGrid.innerHTML = "";
-}
-
-// Handle New Users Joining
-socket.on("userConnected", (userId) => {
-    console.log("User joined:", userId);
-    const videoElement = document.createElement("video");
-    videoElement.autoplay = true;
-    videoGrid.appendChild(videoElement);
-});
-
-// Handle Call Ended
-socket.on("callEnded", () => {
-    document.getElementById("videoPopup").style.display = "none";
-    stopVideoStream();
-});
+ const videoGrid = document.getElementById("videoGrid");
 
     </script>
 <script src="./server.js"></script>

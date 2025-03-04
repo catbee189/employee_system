@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Joiner</title>
+    <style>
+        body { text-align: center; background: black; color: white; font-family: Arial, sans-serif; }
+        video { width: 20%; border: 2px solid white; margin: 10px; background: black; }
+        .controls { margin: 10px; }
+        button { margin: 5px; padding: 10px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>Joiner</h1>
+    <video id="localVideo" autoplay playsinline muted></video>
+    <div id="remoteVideos"></div>
+
+    <div class="controls">
+        <button id="toggleCamera">Camera Off</button>
+        <button id="toggleMic">Mute</button>
+        <button id="endCall">End Call</button>
+    </div>
+
+    <script>
+        const ws = new WebSocket("ws://localhost:3001");
+        let peerConnection = null; // Single peer connection
+        let localStream;
+        let userId = "joiner_" + Math.floor(Math.random() * 10000);
+        let targetId = "caller";
+        const localVideoElem = document.getElementById("localVideo");
+
+        ws.onopen = () => {
+            ws.send(JSON.stringify({ type: "register", id: userId, role: "joiner" }));
+        };
+
+        async function startStream() {
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                localVideoElem.srcObject = localStream;
+                ws.send(JSON.stringify({ type: "requestOffer", target: targetId, from: userId }));
+            } catch (error) {
+                console.error("Error accessing media devices.", error);
+            }
+        }
+
+        function setupPeerConnection(callerId) {
+            if (peerConnection) return peerConnection; // Return existing peer connection if any
+
+            peerConnection = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+            localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+            peerConnection.onicecandidate = event => {
+                if (event.candidate) {
+                    ws.send(JSON.stringify({ type: "candidate", target: callerId, candidate: event.candidate, from: userId }));
+                }
+            };
+
+            peerConnection.ontrack = event => {
+                let remoteVideo = document.getElementById("video_" + callerId);
+                if (!remoteVideo) {
+                    remoteVideo = document.createElement("video");
+                    remoteVideo.id = "video_" + callerId;
+                    remoteVideo.autoplay = true;
+                    remoteVideo.playsInline = true;
+                    remoteVideo.style.width = "20%";
+                    remoteVideo.style.border = "2px solid white";
+                    remoteVideo.style.margin = "10px";
+                    document.getElementById("remoteVideos").appendChild(remoteVideo);
+                }
+                remoteVideo.srcObject = event.streams[0];
+            };
+
+            return peerConnection;
+        }
+
+        ws.onmessage = async (message) => {
+            const data = JSON.parse(message.data);
+            if (data.type === "offer") {
+                if (!peerConnection) peerConnection = setupPeerConnection(data.from);
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
+                ws.send(JSON.stringify({ type: "answer", target: data.from, answer, from: userId }));
+            } else if (data.type === "candidate" && peerConnection) {
+                await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+            } else if (data.type === "endCall") {
+                console.log("Caller ended the call.");
+                endCall();
+            }
+        };
+
+        document.getElementById("toggleCamera").addEventListener("click", () => {
+            const videoTrack = localStream.getVideoTracks()[0];
+            videoTrack.enabled = !videoTrack.enabled;
+            document.getElementById("toggleCamera").textContent = videoTrack.enabled ? "Camera Off" : "Camera On";
+        });
+
+        document.getElementById("toggleMic").addEventListener("click", () => {
+            const audioTrack = localStream.getAudioTracks()[0];
+            audioTrack.enabled = !audioTrack.enabled;
+            document.getElementById("toggleMic").textContent = audioTrack.enabled ? "Mute" : "Unmute";
+        });
+
+        function endCall() {
+            ws.send(JSON.stringify({ type: "endCall", target: targetId, from: userId }));
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+            }
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                localVideoElem.srcObject = null;
+            }
+            document.getElementById("remoteVideos").innerHTML = "";
+        }
+
+        document.getElementById("endCall").addEventListener("click", endCall);
+        startStream();
+    </script>
+</body>
+</html>

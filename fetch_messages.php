@@ -15,6 +15,11 @@ $messages = [];
 while ($row = mysqli_fetch_assoc($result)) {
     $messages[] = $row;
 }
+// Fetch the call request status
+$query = $conn->prepare("SELECT * FROM call_logs WHERE caller_id = ? AND joiner_id = ?");
+$query->bind_param("ii", $receiver_id, $user_id);
+$query->execute();
+$result = $query->get_result();
 
 echo json_encode($messages);
 ?>
