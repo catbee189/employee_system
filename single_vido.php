@@ -202,12 +202,30 @@ if (!$receiver_id) {
 
         async function endCall() {
             ws.send(JSON.stringify({ type: "endCall", from: userId }));
+            try {
+                const response = await fetch("call_logs.php", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        callerId: "<?php echo $user_id; ?>",
+                        joinerId: "<?php echo $receiver_id; ?>",
+                        endTime: new Date().toISOString(), // Optional if you use server time
+                    }),
+                });
+                const data = await response.json();
+                console.log(data.message);
+            } catch (error) {
+                console.error("Error logging call end:", error);
+            }
+
             document.body.innerHTML += "<div style='position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 24px; color: white;'>Call Ended. Redirecting...</div>";
+
             setTimeout(() => {
-                window.location.href = 'call.php';
+                window.location.href = 'message.php?user_id=<?= $receiver_id ?>'; // Replace with your redirect logic
             }, 3000);
         }
-
         document.getElementById("endCall").addEventListener("click", endCall);
 
         document.getElementById("toggleCamera").addEventListener("click", () => {

@@ -50,7 +50,7 @@ if (!$receiver_id) {
         }
         #remoteVideo {
             position: absolute;
-            top: 10;
+            top: 10px;
             left: 50%;
             transform: translateX(-50%);
             width: 30vw;
@@ -86,10 +86,6 @@ if (!$receiver_id) {
         #endCall:hover {
             background: #c0392b;
         }
-        .modal-body p {
-        color: blue;
-        font-weight: bold;
-    }
     </style>
 </head>
 <body>
@@ -102,37 +98,22 @@ if (!$receiver_id) {
         <button id="endCall">End Call</button>
     </div>
 
-    <?php 
-    $sql = "SELECT * FROM call_logs ORDER BY start_time DESC";
-    $result = $conn->query($sql);
-    $row = $result->fetch_assoc(); 
-    if ($row && $row['status'] == "end") :
-    ?>
-    <script>
-        document.addEventListener("DOMContentLoaded", function () {
-            var modal = new bootstrap.Modal(document.getElementById('incomingCallModal'));
-            modal.show();
-        });
-    </script>
-    <?php endif; ?>
-
     <!-- Bootstrap Modal -->
-    <div class="modal fade" id="incomingCallModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Incoming Video Call</h5>
-                <!-- Remove close button -->
-            </div>
-            <div class="modal-body">
-                <p>Call has ended.</p>
-            </div>
-            <div class="modal-footer">
-                <a href="message.php?user_id=<?= $receiver_id ?>" class="btn btn-success">OK</a>
+    <div class="modal fade" id="endCallModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title text-danger">Call Ended</h5>
+                </div>
+                <div class="modal-body">
+                    <p class="text-danger">The call has ended.</p>
+                </div>
+                <div class="modal-footer">
+                    <a href="message.php?user_id=<?= $receiver_id ?>" class="btn btn-success">OK</a>
+                </div>
             </div>
         </div>
     </div>
-</div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
@@ -189,7 +170,51 @@ if (!$receiver_id) {
             }
         };
 
-        document.getElementById("endCall").addEventListener("click", endCall);
+        function checkCallStatus() {
+            fetch("check_call_status.php")
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === "end") {
+                        var modal = new bootstrap.Modal(document.getElementById('endCallModal'));
+                        modal.show();
+                    }
+                })
+                .catch(error => console.error("Error fetching call status:", error));
+        }
+
+        // Check call status every 3 seconds
+        setInterval(checkCallStatus, 3000);
+
+        async function endCall() {
+    ws.send(JSON.stringify({ type: "endCall", from: userId }));
+
+    try {
+        const response = await fetch("call.logs", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+            body: `callerId=<?php echo $user_id; ?>&joinerId=<?php echo $receiver_id; ?>`,
+        });
+        const data = await response.json();
+        console.log(data.message);
+    } catch (error) {
+        console.error("Error updating call status:", error);
+    }
+
+    document.body.innerHTML += "<div style='position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 24px; color: white;'>Call Ended. Redirecting...</div>";
+
+    setTimeout(() => {
+        window.location.href = 'message.php?user_id=<?= $receiver_id ?>';
+    }, 3000);
+}
+
+document.getElementById("endCall").addEventListener("click", () => {
+    endCall();
+});
+
+      
+
         startStream();
     </script>
 </body>

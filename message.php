@@ -31,9 +31,8 @@ if ($row = $result->fetch_assoc()) {
     $receiver_name = "Unknown User";
     $receiver_image = 'default.jpg';
 }
-
-
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -72,95 +71,68 @@ if ($row = $result->fetch_assoc()) {
             </a>
         </div>
     </div>
-<!-- Incoming Call Modal -->
-<?php 
-$sql = "SELECT * FROM call_logs ORDER BY start_time DESC";
-$result = $conn->query($sql);
 
-// Fetch the first row
-$row = $result->fetch_assoc(); 
-
-if ($row && $row['status'] == "in-progress") :
-?>
-
-?>
-    <script>
-        document.addEventListener("DOMContentLoaded", function () {
-            var modal = new bootstrap.Modal(document.getElementById('incomingCallModal'));
-            modal.show();
-        });
-    </script>
-<?php
-endif;
-?>
-
-<!-- Bootstrap Modal -->
-<div class="modal fade" id="incomingCallModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Incoming Video Call</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <p>You have an incoming video call. Do you want to join?</p>
-            </div>
-            <div class="modal-footer">
-                <button id="declineCallBtn" data-user-id="<?= $receiver_id ?>" class="btn btn-danger">Decline</button>
+    <!-- Incoming Call Modal -->
+    <div class="modal fade" id="incomingCallModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Incoming Video Call</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>You have an incoming video call. Do you want to join?</p>
+                </div>
+                <div class="modal-footer">
+                <button id="declineCallBtn" class="btn btn-danger" data-user-id="<?= $_GET['user_id'] ?? '' ?>">Decline</button>
                 <a href="join_accept.php?user_id=<?= $receiver_id ?>" class="btn btn-success">Join</a>
+                </div>
             </div>
         </div>
     </div>
-</div>
-
-<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
 <script>
-$(document).ready(function() {
-    $("#declineCallBtn").click(function() {
-        var userId = $(this).data("user-id");
+document.getElementById("declineCallBtn").addEventListener("click", function(event) {
+    event.preventDefault(); // Prevent button default behavior
 
-        Swal.fire({
-            title: "Are you sure?",
-            text: "Do you want to decline the call?",
-            icon: "warning",
-            showCancelButton: true,
-            confirmButtonText: "Yes, Decline",
-            cancelButtonText: "No"
-        }).then((result) => {
-            if (result.isConfirmed) {
-                $.ajax({
-                    url: "decline_call.php?user_id=" + userId,
-                    method: "GET",
-                    success: function(response) {
-                        Swal.fire({
-                            title: "Call Declined",
-                            text: "You have successfully declined the call.",
-                            icon: "success",
-                            confirmButtonText: "OK"
-                        }).then(() => {
-                            window.location.href = "message.php?user_id=" + userId; // Fixed issue
+    let userId = this.getAttribute("data-user-id");
+
+    if (!userId) {
+        Swal.fire("Error", "Invalid user ID.", "error");
+        return;
+    }
+
+    Swal.fire({
+        title: "Are you sure?",
+        text: "You are about to decline the call!",
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonColor: "#d33",
+        cancelButtonColor: "#3085d6",
+        confirmButtonText: "Yes, decline it!"
+    }).then((result) => {
+        if (result.isConfirmed) {
+            // Send request to PHP to update status
+            fetch("decline_call.php?user_id=" + userId)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === "success") {
+                        Swal.fire("Declined", "Call has been declined.", "success").then(() => {
+                            window.location.href = "message.php?user_id=" + userId; // Redirect after alert
                         });
-                    },
-                    error: function() {
-                        Swal.fire("Error", "Unable to decline call.", "error");
+                    } else {
+                        Swal.fire("Error", data.message, "error");
                     }
+                })
+                .catch(error => {
+                    console.error("Error:", error);
+                    Swal.fire("Error", "Something went wrong!", "error");
                 });
-            }
-        });
+        }
     });
 });
 </script>
-
-<!-- Include SweetAlert -->
-
-
-<!-- Bootstrap Modal -->
-
-
-<!-- Bootstrap JS (Ensure it's included) -->
-    <!-- Row to Separate Messages and Call Logs -->
+    <!-- Messages & Call Logs -->
     <div class="row mt-3">
         <div class="col-md-8">
             <div class="chat-box" id="chatBox"></div>
@@ -176,13 +148,12 @@ $(document).ready(function() {
         </div>
     </div>
 </div>
-<script>
-    
-</script>
+
 <script>
 $(document).ready(function () {
     let sender_id = <?php echo $user_id; ?>;
     let receiver_id = <?php echo $receiver_id; ?>;
+    let modalShown = false;
 
     function loadMessages() {
         $.get("fetch_messages.php", { sender_id, receiver_id }, function (data) {
@@ -204,39 +175,23 @@ $(document).ready(function () {
     }
 
     function loadCallLogs() {
-    $.get("fetch_calls_log.php", { sender_id, receiver_id }, function (data) {
-        let callData = JSON.parse(data);
-        let callLogsBox = $("#callLogsBox");
-        callLogsBox.html("");
+        $.get("fetch_calls_log.php", { sender_id, receiver_id }, function (data) {
+            let callData = JSON.parse(data);
+            let callLogsBox = $("#callLogsBox");
+            callLogsBox.html("");
 
-        if (callData.length === 0) {
-            callLogsBox.append("<p class='text-center'>No call logs available.</p>");
-        } else {
             callData.forEach(item => {
-                // Skip "in-progress" calls
-                if (item.status.toLowerCase() === "in-progress") {
-                    return;
+                if (item.status.toLowerCase() === "in-progress" && !modalShown) {
+                    modalShown = true;
+                    var modal = new bootstrap.Modal(document.getElementById('incomingCallModal'));
+                    modal.show();
                 }
-
-                // Assign colors based on call status
-                let colorClass = "";
-                if (item.status.toLowerCase() === "declined") {
-                    colorClass = "bg-danger text-white"; // Red
-              
-                } else if (item.status.toLowerCase() === "ended") {
-                    colorClass = "bg-warning text-dark"; // Yellow
+                if (item.status.toLowerCase() !== "in-progress") {
+                    callLogsBox.append(`<div class="call-entry">${item.start_time} - ${item.status}</div>`);
                 }
-
-                // Append call log entry
-                callLogsBox.append(`
-                    <div class="call-entry ${colorClass} p-2 rounded my-1">
-                        ${item.start_time} - ${item.status}
-                    </div>
-                `);
             });
-        }
-    });
-}
+        });
+    }
 
     $("#sendBtn").click(function () {
         let message = $("#message").val().trim();
@@ -253,4 +208,5 @@ $(document).ready(function () {
 </script>
 </body>
 </html>
+
 <?php include("./layouts/footer.php"); ?>

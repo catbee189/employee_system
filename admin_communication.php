@@ -148,7 +148,6 @@ if ($result2->num_rows > 0) {
                     <span class="ml-2">'.$userName.' ('.$row['role'].')</span>
                     <div class="ml-auto">
                         <a href="message.php?user_id='.$userId.'" class="btn btn-primary btn-sm">Message</a>
-                        <button class="btn btn-success btn-sm">Call</button>
                     </div>
                 </li>';
             }
